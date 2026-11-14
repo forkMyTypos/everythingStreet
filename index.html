@@ -3,24 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flash N Dash — 3D Demo</title>
+  <title>Flash N Dash — Three.js Demo</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { overflow: hidden; background: #0c1026; font-family: system-ui, -apple-system, sans-serif; }
     #hud {
       position: fixed; top: 14px; left: 14px; z-index: 10;
-      color: #f6e7c8; font-size: 13px; line-height: 1.4;
+      color: #f6e7c8; font-size: 13px;
       background: rgba(12, 16, 38, 0.82); border: 1px solid rgba(246, 231, 200, 0.2);
-      padding: 10px 14px; border-radius: 8px; backdrop-filter: blur(4px);
+      padding: 8px 14px; border-radius: 8px;
     }
-    #status { margin-top: 4px; color: #ffae42; font-weight: 600; }
   </style>
 </head>
 <body>
-  <div id="hud">
-    <div><strong>Flash N Dash</strong> • Left-drag: Orbit • Right-drag: Pan • Scroll: Zoom</div>
-    <div id="status">Loading flash_n_dash.glb...</div>
-  </div>
+  <div id="hud"><strong>Flash N Dash</strong> • Left-drag: Orbit • Right-drag: Pan • Scroll: Zoom</div>
 
   <script type="importmap">
     {
@@ -34,77 +30,290 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    const statusEl = document.getElementById('status');
-
-    // Scene & Twilight Fog
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f1530);
-    scene.fog = new THREE.FogExp2(0x0f1530, 0.016);
+    scene.background = new THREE.Color(0x0e132b);
+    scene.fog = new THREE.FogExp2(0x0e132b, 0.015);
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 250);
-    camera.position.set(-14, 7.5, 15.5);
+    const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(-14.5, 5.2, 15.5);
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
-    // Controls (Touch + Mouse friendly)
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 2.2, 0);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI * 0.49;
 
-    // Ground Plane
+    // Ground
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(80, 80),
-      new THREE.MeshBasicMaterial({ color: 0x1a2038 })
+      new THREE.MeshBasicMaterial({ color: 0x161b30 })
     );
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
 
-    // Resolve relative to current page directory (works in /Repo-Name/ subpaths on GitHub Pages)
-    const modelUrl = new URL('./flash_n_dash.glb', window.location.href).href;
+    // ==========================================
+    // 1. PAINTERLY CANVAS TEXTURE GENERATORS
+    // ==========================================
+    function makeGouacheTex(cTop, cMid, cBot, inkBorder = true, w = 256, h = 256) {
+      const cvs = document.createElement('canvas');
+      cvs.width = w; cvs.height = h;
+      const ctx = cvs.getContext('2d');
 
-    const loader = new GLTFLoader();
-    loader.load(
-      modelUrl,
-      (gltf) => {
-        gltf.scene.traverse((child) => {
-          if (child.isMesh && child.material) {
-            const oldMat = child.material;
-            child.material = new THREE.MeshBasicMaterial({
-              map: oldMat.map || null,
-              color: oldMat.map ? 0xffffff : oldMat.color
-            });
-          }
-        });
-        scene.add(gltf.scene);
-        statusEl.textContent = 'Model loaded';
-        statusEl.style.color = '#4ade80';
-      },
-      (xhr) => {
-        if (xhr.total > 0) {
-          const pct = Math.round((xhr.loaded / xhr.total) * 100);
-          statusEl.textContent = `Loading model... ${pct}%`;
-        }
-      },
-      (err) => {
-        console.error('GLB load error:', err);
-        statusEl.textContent = 'Could not load ./flash_n_dash.glb — check that the filename is lowercase in the same folder.';
-        statusEl.style.color = '#f87171';
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, cTop);
+      grad.addColorStop(0.55, cMid);
+      grad.addColorStop(1, cBot);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Visible painterly gouache brushstrokes
+      for (let i = 0; i < 420; i++) {
+        const x = Math.random() * w;
+        const y = Math.random() * h;
+        const bw = 4 + Math.random() * 14;
+        const bh = 18 + Math.random() * 48;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,245,225,0.055)' : 'rgba(18,22,48,0.065)';
+        ctx.fillRect(x, y, bw, bh);
       }
-    );
 
+      if (inkBorder) {
+        ctx.strokeStyle = '#0a0d1c';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
+      }
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function makeNeonStripeTex(cEdge, cCore) {
+      const cvs = document.createElement('canvas');
+      cvs.width = 256; cvs.height = 64;
+      const ctx = cvs.getContext('2d');
+      // Clean light outer border frame
+      ctx.fillStyle = '#e8edf5';
+      ctx.fillRect(0, 0, 256, 64);
+      // Glowing neon gradient core
+      const g = ctx.createLinearGradient(0, 4, 0, 60);
+      g.addColorStop(0.0, cEdge);
+      g.addColorStop(0.32, cCore);
+      g.addColorStop(0.50, '#ffffff');
+      g.addColorStop(0.68, cCore);
+      g.addColorStop(1.0, cEdge);
+      ctx.fillStyle = g;
+      ctx.fillRect(4, 5, 248, 54);
+
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function makeSignTex() {
+      const cvs = document.createElement('canvas');
+      cvs.width = 1024; cvs.height = 256;
+      const ctx = cvs.getContext('2d');
+
+      // Deep navy fascia backing with painterly strokes
+      ctx.fillStyle = '#0b1021';
+      ctx.fillRect(0, 0, 1024, 256);
+      for (let i = 0; i < 200; i++) {
+        ctx.fillStyle = 'rgba(40,60,110,0.08)';
+        ctx.fillRect(Math.random() * 1024, Math.random() * 256, 40, 8);
+      }
+
+      // Tightly kerned, bold condensed "Flash N Dash" typography
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+
+      // "Flash"
+      ctx.font = '900 132px "Arial Narrow", "Impact", sans-serif';
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#060812';
+      ctx.strokeText('Flash', 270, 134);
+      ctx.fillStyle = '#ffbe2e';
+      ctx.fillText('Flash', 270, 134);
+
+      // Stylized larger red "N"
+      ctx.font = '900 168px "Arial Narrow", "Impact", sans-serif';
+      ctx.lineWidth = 16;
+      ctx.strokeStyle = '#060812';
+      ctx.strokeText('N', 525, 130);
+      ctx.fillStyle = '#ff2a1f';
+      ctx.fillText('N', 525, 130);
+
+      // "Dash"
+      ctx.font = '900 132px "Arial Narrow", "Impact", sans-serif';
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#060812';
+      ctx.strokeText('Dash', 775, 134);
+      ctx.fillStyle = '#ffbe2e';
+      ctx.fillText('Dash', 775, 134);
+
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function makeFrostedDecalTex() {
+      const cvs = document.createElement('canvas');
+      cvs.width = 512; cvs.height = 64;
+      const ctx = cvs.getContext('2d');
+      ctx.fillStyle = 'rgba(235, 240, 245, 0.78)';
+      ctx.fillRect(0, 0, 512, 64);
+      // Iconic triple diagonal stripes
+      ctx.fillStyle = '#ff6a1a';
+      for (let x = 24; x < 490; x += 64) {
+        for (let s = 0; s < 3; s++) {
+          ctx.beginPath();
+          ctx.moveTo(x + s * 10, 48);
+          ctx.lineTo(x + s * 10 + 8, 16);
+          ctx.lineTo(x + s * 10 + 14, 16);
+          ctx.lineTo(x + s * 10 + 6, 48);
+          ctx.fill();
+        }
+      }
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ==========================================
+    // 2. MATERIALS (WARM FRONT VS COOL SIDE)
+    // ==========================================
+    const matWallWarm  = new THREE.MeshBasicMaterial({ map: makeGouacheTex('#ffe6be', '#e8c89b', '#6d6882') });
+    const matWallCool  = new THREE.MeshBasicMaterial({ map: makeGouacheTex('#7c87a6', '#4d5878', '#252c47') });
+    const matInterior  = new THREE.MeshBasicMaterial({ map: makeGouacheTex('#fff7e6', '#f2dfc2', '#bfa98e') });
+    const matFrame     = new THREE.MeshBasicMaterial({ map: makeGouacheTex('#3a333b', '#22202b', '#0d101c') });
+    const matFascia    = new THREE.MeshBasicMaterial({ map: makeGouacheTex('#141c33', '#0b1021', '#060812') });
+    const matStep      = new THREE.MeshBasicMaterial({ map: makeGouacheTex('#9ca3b8', '#687087', '#353b52') });
+    const matTubeLight = new THREE.MeshBasicMaterial({ color: 0xfff3d1 });
+    const matGlass     = new THREE.MeshBasicMaterial({ color: 0xa8d8ea, transparent: true, opacity: 0.22, depthWrite: false });
+    const matDecal     = new THREE.MeshBasicMaterial({ map: makeFrostedDecalTex(), transparent: true });
+    const matSignBoard = new THREE.MeshBasicMaterial({ map: makeSignTex() });
+
+    const matOrange = new THREE.MeshBasicMaterial({ map: makeNeonStripeTex('#ff4d00', '#ff9429') });
+    const matGreen  = new THREE.MeshBasicMaterial({ map: makeNeonStripeTex('#00a843', '#29f073') });
+    const matRed    = new THREE.MeshBasicMaterial({ map: makeNeonStripeTex('#d90b0b', '#ff473d') });
+
+    // ==========================================
+    // 3. BUILD 1-STORY EMPTY STORE (11.5m x 8.5m)
+    // ==========================================
+    const store = new THREE.Group();
+    scene.add(store);
+
+    function addBox(w, h, d, x, y, z, mat) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      store.add(m);
+      return m;
+    }
+
+    const W = 11.5, D = 8.5, H = 3.5, HF = 1.25;
+
+    // Empty Lit Interior Shell (Floor, Back Wall, Right Wall, Ceiling)
+    addBox(W, 0.16, D, 0, 0.08, 0, matInterior);
+    addBox(W, H, 0.28, 0, H / 2, -D / 2 + 0.14, matInterior);
+    addBox(0.28, H, D, W / 2 - 0.14, H / 2, 0, matInterior);
+    addBox(W, 0.22, D, 0, H + 0.11, 0, matInterior);
+
+    // Front Warm Columns & Left Cool Twilight Columns
+    addBox(0.42, H, 0.42, -W / 2 + 0.21, H / 2, D / 2 - 0.21, matWallWarm); // Corner Pillar
+    addBox(0.40, H, 0.40, -1.65, H / 2, D / 2 - 0.20, matWallWarm);
+    addBox(0.40, H, 0.40,  1.45, H / 2, D / 2 - 0.20, matWallWarm);
+    addBox(0.42, H, 0.42,  W / 2 - 0.21, H / 2, D / 2 - 0.21, matWallWarm);
+
+    addBox(0.40, H, 0.40, -W / 2 + 0.20, H / 2,  0.20, matWallCool);
+    addBox(0.42, H, 0.42, -W / 2 + 0.21, H / 2, -D / 2 + 0.21, matWallCool);
+
+    // Concrete Entrance Step & Base Plinth
+    addBox(W + 0.1, 0.18, 0.35, 0, 0.09, D / 2 - 0.15, matStep);
+    addBox(2.9, 0.16, 0.85, -0.10, 0.08, D / 2 + 0.35, matStep);
+
+    // Front Window & Sliding Door Bays
+    const fz = D / 2 - 0.20;
+    function addFrontBay(x1, x2, isDoor = false) {
+      const len = Math.abs(x2 - x1);
+      const mx = (x1 + x2) / 2;
+      addBox(len, 0.16, 0.12, mx, 0.08, fz, matFrame);
+      addBox(len, 0.12, 0.12, mx, H - 0.06, fz, matFrame);
+      addBox(len, 0.10, 0.11, mx, 2.48, fz, matFrame);
+      addBox(len - 0.06, H - 0.24, 0.02, mx, H / 2, fz, matGlass);
+      if (isDoor) {
+        for (const off of [-0.72, 0, 0.72]) {
+          addBox(0.08, 2.48, 0.13, mx + off, 1.24, fz, matFrame);
+        }
+      } else {
+        addBox(len - 0.08, 0.22, 0.03, mx, 1.18, fz + 0.01, matDecal);
+      }
+    }
+    addFrontBay(-W / 2 + 0.42, -1.85);
+    addFrontBay(-1.45, 1.25, true);
+    addFrontBay(1.65, W / 2 - 0.42);
+
+    // Left Side Window Bays
+    const lx = -W / 2 + 0.20;
+    function addSideBay(z1, z2) {
+      const len = Math.abs(z2 - z1);
+      const mz = (z1 + z2) / 2;
+      addBox(0.12, 0.16, len, lx, 0.08, mz, matFrame);
+      addBox(0.12, 0.12, len, lx, H - 0.06, mz, matFrame);
+      addBox(0.11, 0.10, len, lx, 2.48, mz, matFrame);
+      addBox(0.02, H - 0.24, len - 0.06, lx, H / 2, mz, matGlass);
+      addBox(0.03, 0.22, len - 0.08, lx - 0.01, 1.18, mz, matDecal);
+    }
+    addSideBay(0.40, D / 2 - 0.42);
+    addSideBay(-D / 2 + 0.42, 0.00);
+
+    // Deeper Canopy Fascia Overhang + Glowing Soffit Tube Lights
+    const yf = H + 0.20;
+    const fw = W + 0.90, fd = D + 0.90;
+    addBox(fw, HF, fd, -0.15, yf + HF / 2, 0.15, matFascia);
+    addBox(fw + 0.22, 0.16, fd + 0.22, -0.15, yf + HF + 0.08, 0.15, matFrame);
+
+    // Framed Upper Roof Billboard/Parapet Structure
+    addBox(W + 0.2, 0.65, D + 0.2, 0, yf + HF + 0.48, 0, matWallCool);
+    addBox(W + 0.35, 0.14, D + 0.35, 0, yf + HF + 0.85, 0, matFrame);
+
+    // Soffit Fluorescent Tube Lights under Canopy
+    addBox(4.2, 0.06, 0.16, -3.2, yf - 0.02, D / 2 + 0.25, matTubeLight);
+    addBox(4.2, 0.06, 0.16,  3.2, yf - 0.02, D / 2 + 0.25, matTubeLight);
+    addBox(0.16, 0.06, 6.8, -W / 2 - 0.25, yf - 0.02, 0.1, matTubeLight);
+
+    // Framed Neon Stripes (Left Side + Front Left + Front Right) + Corner Dividers
+    const stripeMatList = [
+      [matOrange, yf + HF - 0.26],
+      [matGreen,  yf + HF - 0.60],
+      [matRed,    yf + HF - 0.94],
+    ];
+    for (const [sMat, sy] of stripeMatList) {
+      // Left side continuous stripes
+      addBox(0.06, 0.22, fd - 0.24, -0.15 - fw / 2 - 0.01, sy, 0.15, sMat);
+      // Front-left stripes
+      addBox(4.35, 0.22, 0.06, -0.15 - fw / 2 + 2.30, sy, 0.15 + fd / 2 + 0.01, sMat);
+      // Front-right stripes
+      addBox(2.45, 0.22, 0.06, -0.15 + fw / 2 - 1.35, sy, 0.15 + fd / 2 + 0.01, sMat);
+    }
+
+    // Corner & Sign Frame Vertical Dividers
+    addBox(0.14, HF - 0.10, 0.14, -0.15 - fw / 2, yf + HF / 2, 0.15 + fd / 2, matFrame);
+    addBox(0.12, HF - 0.12, 0.08, -1.55, yf + HF / 2, 0.15 + fd / 2 + 0.01, matFrame);
+    addBox(0.12, HF - 0.12, 0.08,  3.15, yf + HF / 2, 0.15 + fd / 2 + 0.01, matFrame);
+
+    // Tightly Kerned "Flash N Dash" Sign Panel
+    addBox(4.60, HF - 0.16, 0.05, 0.80, yf + HF / 2, 0.15 + fd / 2 + 0.015, matSignBoard);
+
+    // Resize & Loop
     window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(innerWidth, innerHeight);
     });
 
     renderer.setAnimationLoop(() => {
