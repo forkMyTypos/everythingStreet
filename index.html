@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flash N Dash — Illustrated 3D Store</title>
+  <title>Flash N Dash — Everything Street</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { overflow: hidden; background: #0c1126; font-family: system-ui, -apple-system, sans-serif; }
@@ -30,390 +30,339 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0c1126);
 
-    // Eye-level street perspective (hides the flat roof top & emphasizes the corner neon!)
     const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 250);
     camera.position.set(-14.5, 2.75, 16.5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
-    // Subtle, tightly controlled bloom ONLY on the brightest neon cores (threshold 1.05)
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(innerWidth, innerHeight),
-      0.32,  // Crisp, controlled glow (no milky haze)
-      0.40,
-      1.05   // Only colors > 1.05 bloom!
-    );
-    composer.addPass(bloomPass);
-    composer.addPass(new OutputPass());
-
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0.2, 2.55, 0);
+    controls.target.set(0, 2.55, 0);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI * 0.495;
 
     // ==========================================
-    // 1. RICH HAND-ILLUSTRATED CANVAS TEXTURES
+    // 1. AUTO-PAINTED 2048x2048 TEXTURE ATLAS
     // ==========================================
-    function makeIllustratedSurface(cTop, cMid, cBot, borderHex = '#090d1c', strokeCount = 500) {
-      const w = 512, h = 512;
-      const cvs = document.createElement('canvas');
-      cvs.width = w; cvs.height = h;
-      const ctx = cvs.getContext('2d');
+    const SIZE = 2048;
+    const atlasCvs = document.createElement('canvas');
+    atlasCvs.width = SIZE;
+    atlasCvs.height = SIZE;
+    const ctx = atlasCvs.getContext('2d');
 
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
+    ctx.fillStyle = '#0a0e1f';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    function paintGouacheRegion(u0, v0, u1, v1, cTop, cMid, cBot, inkBorder = true, strokes = 900, vertical = true) {
+      const x0 = Math.round(u0 * SIZE);
+      const y0 = Math.round((1 - v1) * SIZE);
+      const w = Math.round((u1 - u0) * SIZE);
+      const h = Math.round((v1 - v0) * SIZE);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, y0, w, h);
+      ctx.clip();
+
+      // Base color temperature gradient
+      const grad = ctx.createLinearGradient(0, y0, 0, y0 + h);
       grad.addColorStop(0.0, cTop);
       grad.addColorStop(0.55, cMid);
       grad.addColorStop(1.0, cBot);
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(x0, y0, w, h);
 
-      // Crisp directional gouache paint strokes
-      for (let i = 0; i < strokeCount; i++) {
-        const x = Math.random() * w;
-        const y = Math.random() * h;
-        const bw = 3 + Math.random() * 7;
-        const bh = 28 + Math.random() * 80;
+      // Angled gouache brushstrokes
+      for (let i = 0; i < strokes; i++) {
+        const bx = x0 + Math.random() * w;
+        const by = y0 + Math.random() * h;
+        const bw = vertical ? 3 + Math.random() * 8 : 24 + Math.random() * 70;
+        const bh = vertical ? 24 + Math.random() * 75 : 3 + Math.random() * 8;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate((Math.random() - 0.5) * 0.25);
         ctx.fillStyle = Math.random() > 0.48
-          ? 'rgba(255, 246, 224, 0.055)'
-          : 'rgba(15, 20, 46, 0.065)';
-        ctx.fillRect(x, y, bw, bh);
+          ? 'rgba(255, 244, 218, 0.065)'
+          : 'rgba(14, 18, 44, 0.075)';
+        ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.restore();
       }
 
-      if (borderHex) {
-        ctx.strokeStyle = borderHex;
-        ctx.lineWidth = 8;
-        ctx.strokeRect(4, 4, w - 8, h - 8);
+      // Soft ambient occlusion edge shading
+      const ao = 18;
+      ctx.strokeStyle = 'rgba(10, 14, 34, 0.25)';
+      ctx.lineWidth = ao;
+      ctx.strokeRect(x0 + ao / 2, y0 + ao / 2, w - ao, h - ao);
+
+      // Hand-inked wobbly border
+      if (inkBorder) {
+        ctx.strokeStyle = '#080b18';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        const step = 28;
+        for (let x = x0; x <= x0 + w; x += step) {
+          const j = (Math.random() - 0.5) * 4;
+          if (x === x0) ctx.moveTo(x, y0 + 4 + j);
+          else ctx.lineTo(x, y0 + 4 + j);
+        }
+        for (let y = y0; y <= y0 + h; y += step) {
+          ctx.lineTo(x0 + w - 4 + (Math.random() - 0.5) * 4, y);
+        }
+        for (let x = x0 + w; x >= x0; x -= step) {
+          ctx.lineTo(x, y0 + h - 4 + (Math.random() - 0.5) * 4);
+        }
+        for (let y = y0 + h; y >= y0; y -= step) {
+          ctx.lineTo(x0 + 4 + (Math.random() - 0.5) * 4, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
       }
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
+
+      ctx.restore();
     }
 
-    function makeNeonStripeTex(cDarkEdge, cMid, cHotCore) {
-      const cvs = document.createElement('canvas');
-      cvs.width = 512; cvs.height = 64;
-      const ctx = cvs.getContext('2d');
+    // Paint Architectural UV Regions
+    const UV_SIGN_BOARD  = [0.00, 0.75, 0.50, 1.00];
+    const UV_NEON_STRIP  = [0.50, 0.75, 1.00, 1.00];
+    const UV_COLS_WARM   = [0.00, 0.50, 0.25, 0.75];
+    const UV_COLS_COOL   = [0.25, 0.50, 0.50, 0.75];
+    const UV_FRAMES      = [0.50, 0.50, 0.75, 0.75];
+    const UV_STEP_BASE   = [0.75, 0.50, 1.00, 0.75];
+    const UV_INT_WALLS   = [0.00, 0.25, 0.50, 0.50];
+    const UV_INT_FLOOR   = [0.50, 0.25, 1.00, 0.50];
+    const UV_GLASS_DECAL = [0.00, 0.00, 1.00, 0.25];
 
-      // Dark inked outer slot
-      ctx.fillStyle = '#070a17';
-      ctx.fillRect(0, 0, 512, 64);
+    paintGouacheRegion(...UV_COLS_WARM, '#ffe2b0', '#e0b175', '#585476', true, 950, true);
+    paintGouacheRegion(...UV_COLS_COOL, '#68789e', '#3e4a6c', '#1c233e', true, 950, true);
+    paintGouacheRegion(...UV_FRAMES,    '#383444', '#201e2c', '#0e101c', true, 750, false);
+    paintGouacheRegion(...UV_STEP_BASE, '#a4aec6', '#6c7690', '#30374e', true, 750, false);
+    paintGouacheRegion(...UV_INT_WALLS, '#fff4da', '#eed8b4', '#c4aa8a', true, 950, true);
+    paintGouacheRegion(...UV_INT_FLOOR, '#d2bc9e', '#b8a286', '#927e66', true, 950, false);
 
-      // Rich saturated neon tube gradient with crisp white-hot center line
-      const g = ctx.createLinearGradient(0, 4, 0, 60);
-      g.addColorStop(0.00, cDarkEdge);
-      g.addColorStop(0.22, cMid);
-      g.addColorStop(0.45, cHotCore);
-      g.addColorStop(0.50, '#ffffff');
-      g.addColorStop(0.55, cHotCore);
-      g.addColorStop(0.78, cMid);
-      g.addColorStop(1.00, cDarkEdge);
-      ctx.fillStyle = g;
-      ctx.fillRect(4, 5, 504, 54);
+    // Paint Top-Right Neon Stripes (Orange / Green / Red)
+    {
+      const [u0, v0, u1, v1] = UV_NEON_STRIP;
+      const x0 = u0 * SIZE, y0 = (1 - v1) * SIZE, w = (u1 - u0) * SIZE, h = (v1 - v0) * SIZE;
+      ctx.fillStyle = '#090d1c';
+      ctx.fillRect(x0, y0, w, h);
 
-      // Subtle painterly variation along the tube
-      for (let i = 0; i < 60; i++) {
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(Math.random() * 500, 18, 25, 28);
+      const bands = [
+        [0.07, 0.29, '#be2800', '#ff6e0f'],
+        [0.39, 0.61, '#00732a', '#19dc5f'],
+        [0.71, 0.93, '#a50a0f', '#ff302a'],
+      ];
+      for (const [b0, b1, cEdge, cCore] of bands) {
+        const by = y0 + b0 * h, bh = (b1 - b0) * h;
+        ctx.fillStyle = '#ebf2fa';
+        ctx.fillRect(x0 + 10, by - 4, w - 20, bh + 8);
+        const g = ctx.createLinearGradient(0, by, 0, by + bh);
+        g.addColorStop(0.00, cEdge);
+        g.addColorStop(0.30, cCore);
+        g.addColorStop(0.50, '#ffffff');
+        g.addColorStop(0.70, cCore);
+        g.addColorStop(1.00, cEdge);
+        ctx.fillStyle = g;
+        ctx.fillRect(x0 + 14, by, w - 28, bh);
       }
-
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
     }
 
-    function makeSignTex() {
-      const cvs = document.createElement('canvas');
-      cvs.width = 1024; cvs.height = 256;
-      const ctx = cvs.getContext('2d');
+    // Paint Top-Left "Flash N Dash" Sign Board
+    {
+      const [u0, v0, u1, v1] = UV_SIGN_BOARD;
+      const x0 = u0 * SIZE, y0 = (1 - v1) * SIZE, w = (u1 - u0) * SIZE, h = (v1 - v0) * SIZE;
+      ctx.fillStyle = '#0a0e1e';
+      ctx.fillRect(x0, y0, w, h);
 
-      // Deep midnight navy backing (stays dark and crisp—never muddy!)
-      ctx.fillStyle = '#080c1c';
-      ctx.fillRect(0, 0, 1024, 256);
-
-      // Subtle brushed texture on sign board
-      for (let i = 0; i < 240; i++) {
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(28, 42, 82, 0.14)' : 'rgba(4, 6, 14, 0.20)';
-        ctx.fillRect(Math.random() * 1024, Math.random() * 256, 55, 6);
+      for (let i = 0; i < 300; i++) {
+        ctx.fillStyle = 'rgba(28, 42, 82, 0.12)';
+        ctx.fillRect(x0 + Math.random() * w, y0 + Math.random() * h, 60, 6);
       }
 
-      // Crisp dark inner border
-      ctx.strokeStyle = '#1d2747';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(6, 6, 1012, 244);
+      const glow = ctx.createRadialGradient(x0 + w * 0.5, y0 + h * 0.5, 20, x0 + w * 0.5, y0 + h * 0.5, w * 0.42);
+      glow.addColorStop(0, 'rgba(255, 145, 35, 0.26)');
+      glow.addColorStop(1, 'rgba(10, 14, 30, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x0, y0, w, h);
 
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
-      ctx.transform(1, 0, -0.10, 1, 14, 0);
+      ctx.translate(x0 + w * 0.5, y0 + h * 0.5);
+      ctx.transform(1, 0, -0.10, 1, 0, 0);
 
-      // "Flash"
-      ctx.font = '900 136px "Arial Narrow", "Impact", sans-serif';
-      ctx.lineWidth = 16;
-      ctx.strokeStyle = '#04060e';
-      ctx.strokeText('Flash', 270, 134);
-      ctx.fillStyle = '#ffbe26';
-      ctx.fillText('Flash', 270, 134);
-
-      // Center red "N"
-      ctx.font = '900 176px "Arial Narrow", "Impact", sans-serif';
+      ctx.font = '900 148px "Arial Narrow", "Impact", sans-serif';
       ctx.lineWidth = 18;
-      ctx.strokeStyle = '#04060e';
-      ctx.strokeText('N', 512, 130);
-      ctx.fillStyle = '#ff261b';
-      ctx.fillText('N', 512, 130);
+      ctx.strokeStyle = '#050710';
+      ctx.strokeText('Flash', -w * 0.24, 4);
+      ctx.fillStyle = '#ffc62c';
+      ctx.fillText('Flash', -w * 0.24, 4);
 
-      // "Dash"
-      ctx.font = '900 136px "Arial Narrow", "Impact", sans-serif';
-      ctx.lineWidth = 16;
-      ctx.strokeStyle = '#04060e';
-      ctx.strokeText('Dash', 758, 134);
-      ctx.fillStyle = '#ffbe26';
-      ctx.fillText('Dash', 758, 134);
+      ctx.font = '900 190px "Arial Narrow", "Impact", sans-serif';
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = '#050710';
+      ctx.strokeText('N', 0, 0);
+      ctx.fillStyle = '#ff2a20';
+      ctx.fillText('N', 0, 0);
+
+      ctx.font = '900 148px "Arial Narrow", "Impact", sans-serif';
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = '#050710';
+      ctx.strokeText('Dash', w * 0.24, 4);
+      ctx.fillStyle = '#ffc62c';
+      ctx.fillText('Dash', w * 0.24, 4);
       ctx.restore();
 
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
+      ctx.strokeStyle = '#1c2648';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(x0 + 6, y0 + 6, w - 12, h - 12);
     }
 
-    function makeFrostedDecalTex() {
-      const cvs = document.createElement('canvas');
-      cvs.width = 512; cvs.height = 64;
-      const ctx = cvs.getContext('2d');
-      ctx.fillStyle = 'rgba(232, 240, 248, 0.72)';
-      ctx.fillRect(0, 0, 512, 64);
-      ctx.fillStyle = '#ff5e14';
-      for (let x = 22; x < 490; x += 64) {
+    // Paint Bottom Frosted Triple-Slash Window Decal Strip
+    {
+      const [u0, v0, u1, v1] = UV_GLASS_DECAL;
+      const x0 = u0 * SIZE, y0 = (1 - v1) * SIZE, w = (u1 - u0) * SIZE, h = (v1 - v0) * SIZE;
+      ctx.fillStyle = 'rgba(232, 240, 248, 0.82)';
+      ctx.fillRect(x0, y0, w, h);
+      ctx.fillStyle = '#ff5c16';
+      for (let x = x0 + 40; x < x0 + w - 60; x += 140) {
         for (let s = 0; s < 3; s++) {
+          const bx = x + s * 24;
           ctx.beginPath();
-          ctx.moveTo(x + s * 10, 48);
-          ctx.lineTo(x + s * 10 + 8, 16);
-          ctx.lineTo(x + s * 10 + 14, 16);
-          ctx.lineTo(x + s * 10 + 6, 48);
+          ctx.moveTo(bx, y0 + h - 45);
+          ctx.lineTo(bx + 22, y0 + 45);
+          ctx.lineTo(bx + 38, y0 + 45);
+          ctx.lineTo(bx + 16, y0 + h - 45);
           ctx.fill();
         }
       }
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
     }
 
-    function makeGroundTex() {
-      const cvs = document.createElement('canvas');
-      cvs.width = 1024; cvs.height = 1024;
-      const ctx = cvs.getContext('2d');
-      ctx.fillStyle = '#11162b';
-      ctx.fillRect(0, 0, 1024, 1024);
+    const atlasTex = new THREE.CanvasTexture(atlasCvs);
+    atlasTex.colorSpace = THREE.SRGBColorSpace;
+    atlasTex.anisotropy = 8;
 
-      // Subtle painted tile / asphalt strokes
-      for (let i = 0; i < 900; i++) {
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(34, 44, 78, 0.14)' : 'rgba(8, 11, 24, 0.18)';
-        ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 45, 10);
-      }
-
-      // Soft, natural warm storefront bounce directly in front of the glass (no muddy brown rings)
-      const g = ctx.createRadialGradient(512, 630, 20, 512, 630, 240);
-      g.addColorStop(0.0, 'rgba(255, 198, 115, 0.32)');
-      g.addColorStop(0.5, 'rgba(255, 145, 65, 0.10)');
-      g.addColorStop(1.0, 'rgba(17, 22, 43, 0.0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, 1024, 1024);
-
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
-    }
+    const atlasMat = new THREE.MeshBasicMaterial({ map: atlasTex });
 
     // ==========================================
-    // 2. CRISP ILLUSTRATED MATERIALS
-    // ==========================================
-    // Warm golden-cream front facade vs cool twilight slate-blue left side
-    const matColFront  = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#ffe3b3', '#e0b379', '#5a5675') });
-    const matColSide   = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#67779c', '#3d496b', '#1b223b') });
-
-    // Clean, balanced interior shell (warm ceiling, soft cream walls, tiled floor—NOT blown out!)
-    const matIntCeil   = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#fff2d6', '#f2dcb6', '#dec297', '#8c785c', 220) });
-    const matIntWall   = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#f5e5c8', '#dfc7a3', '#bfa482', '#7a6852', 260) });
-    const matIntFloor  = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#cbb599', '#b59e82', '#99836a', '#594c3e', 300) });
-
-    // Dark inked bronze frames, deep navy fascia & sleek cornice roof
-    const matFrame     = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#2e2936', '#1b1924', '#090c17', '#05070f', 180) });
-    const matFascia    = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#111930', '#090e1f', '#050812', '#04060d', 200) });
-    const matCornice   = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#485475', '#29324d', '#121729', '#060812', 220) });
-    const matStep      = new THREE.MeshBasicMaterial({ map: makeIllustratedSurface('#9aa4bd', '#656f8a', '#2e354d', '#090d1c', 180) });
-
-    // Controlled HDR Emissives (>1.05 triggers subtle crisp bloom ONLY on the bulbs/neon)
-    const matTubeBulb  = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.35, 1.25, 1.05) });
-    const matOrange    = new THREE.MeshBasicMaterial({ map: makeNeonStripeTex('#b82800', '#ff5900', '#ffaa44'), color: new THREE.Color(1.22, 1.12, 1.05) });
-    const matGreen     = new THREE.MeshBasicMaterial({ map: makeNeonStripeTex('#006b28', '#00c44b', '#6bff9e'), color: new THREE.Color(1.05, 1.22, 1.10) });
-    const matRed       = new THREE.MeshBasicMaterial({ map: makeNeonStripeTex('#8f0000', '#e61919', '#ff736b'), color: new THREE.Color(1.25, 1.06, 1.06) });
-    const matSignBoard = new THREE.MeshBasicMaterial({ map: makeSignTex(), color: new THREE.Color(1.12, 1.10, 1.06) });
-
-    // Subtle tinted storefront glass (no foggy additive curtains!)
-    const matGlass     = new THREE.MeshBasicMaterial({ color: 0x99d6eb, transparent: true, opacity: 0.14, depthWrite: false });
-    const matDecal     = new THREE.MeshBasicMaterial({ map: makeFrostedDecalTex(), transparent: true });
-
-    // Ground
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(60, 60),
-      new THREE.MeshBasicMaterial({ map: makeGroundTex() })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
-
-    // ==========================================
-    // 3. BUILD SYMMETRICAL 1-STORY STORE (14m x 10m)
+    // 2. BUILD UV-MAPPED 1-STORY STORE (14m x 10m)
     // ==========================================
     const store = new THREE.Group();
     scene.add(store);
 
-    function addBox(w, h, d, x, y, z, mat) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-      m.position.set(x, y, z);
-      store.add(m);
-      return m;
+    function addUVBox(w, h, d, x, y, z, uvRect) {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const [u0, v0, u1, v1] = uvRect;
+      const pad = 0.004;
+      const a0 = u0 + pad, b0 = v0 + pad, a1 = u1 - pad, b1 = v1 - pad;
+      const uvAttr = geo.attributes.uv;
+      for (let i = 0; i < uvAttr.count; i++) {
+        const u = uvAttr.getX(i);
+        const v = uvAttr.getY(i);
+        uvAttr.setXY(i, a0 + u * (a1 - a0), b0 + v * (b1 - b0));
+      }
+      const mesh = new THREE.Mesh(geo, atlasMat);
+      mesh.position.set(x, y, z);
+      store.add(mesh);
+      return mesh;
     }
 
     const W = 14.0, D = 10.0, H = 3.85, HF = 1.45;
 
-    // Empty Lit Interior Shell (Distinct floor, walls, ceiling & recessed light strips)
-    addBox(W, 0.16, D, 0, 0.08, 0, matIntFloor);
-    addBox(W, H, 0.30, 0, H / 2, -D / 2 + 0.15, matIntWall);
-    addBox(0.30, H, D, W / 2 - 0.15, H / 2, 0, matIntWall);
-    addBox(W, 0.24, D, 0, H + 0.12, 0, matIntCeil);
+    // Empty Interior Shell
+    addUVBox(W, 0.16, D, 0, 0.08, 0, UV_INT_FLOOR);
+    addUVBox(W, H, 0.30, 0, H / 2, -D / 2 + 0.15, UV_INT_WALLS);
+    addUVBox(0.30, H, D, W / 2 - 0.15, H / 2, 0, UV_INT_WALLS);
+    addUVBox(W, 0.24, D, 0, H + 0.12, 0, UV_INT_WALLS);
 
-    // Crisp Interior Ceiling Fluorescent Strips
-    for (const ix of [-4.2, 0, 4.2]) {
-      addBox(2.4, 0.05, 0.20, ix, H - 0.02, 1.2, matTubeBulb);
-      addBox(2.4, 0.05, 0.20, ix, H - 0.02, -1.8, matTubeBulb);
+    // Symmetrical Columns
+    const doorHalfW = 1.65, cw = 0.44;
+    for (const cx of [-W / 2 + cw / 2, -doorHalfW - cw / 2, doorHalfW + cw / 2, W / 2 - cw / 2]) {
+      addUVBox(cw, H, cw, cx, H / 2, D / 2 - cw / 2, UV_COLS_WARM);
+    }
+    for (const cz of [0.0, -D / 2 + cw / 2]) {
+      addUVBox(cw, H, cw, -W / 2 + cw / 2, H / 2, cz, UV_COLS_COOL);
     }
 
-    // Symmetrical Front Columns (Warm) & Left Side Columns (Cool Twilight)
-    const doorHalfW = 1.65;
-    const colW = 0.44;
-    const frontCols = [
-      -W / 2 + colW / 2,
-      -doorHalfW - colW / 2,
-       doorHalfW + colW / 2,
-       W / 2 - colW / 2
-    ];
-    for (const cx of frontCols) {
-      addBox(colW, H, colW, cx, H / 2, D / 2 - colW / 2, matColFront);
-    }
-    addBox(colW, H, colW, -W / 2 + colW / 2, H / 2, 0.0, matColSide);
-    addBox(colW, H, colW, -W / 2 + colW / 2, H / 2, -D / 2 + colW / 2, matColSide);
+    // Plinth & Centered Entrance Step
+    addUVBox(W + 0.1, 0.18, 0.38, 0, 0.09, D / 2 - 0.16, UV_STEP_BASE);
+    addUVBox(3.40, 0.16, 0.90, 0, 0.08, D / 2 + 0.38, UV_STEP_BASE);
 
-    // Centered Concrete Plinth & Entrance Threshold Step
-    addBox(W + 0.1, 0.18, 0.38, 0, 0.09, D / 2 - 0.16, matStep);
-    addBox(3.40, 0.16, 0.90, 0, 0.08, D / 2 + 0.38, matStep);
-
-    // Front Window & Centered Sliding Door Bays
+    // Front Mullions, Frosted Decals & Transparent Glass
+    const glassMat = new THREE.MeshBasicMaterial({ color: 0xa8dcf0, transparent: true, opacity: 0.14, depthWrite: false });
     const fz = D / 2 - 0.22;
-    function addFrontBay(x1, x2, isDoor = false) {
-      const len = Math.abs(x2 - x1);
-      const mx = (x1 + x2) / 2;
-      addBox(len, 0.16, 0.12, mx, 0.08, fz, matFrame);
-      addBox(len, 0.13, 0.12, mx, H - 0.065, fz, matFrame);
-      addBox(len, 0.10, 0.11, mx, 2.68, fz, matFrame);
-      addBox(len - 0.06, H - 0.26, 0.02, mx, H / 2, fz, matGlass);
+    for (const [x1, x2, isDoor] of [[-W / 2 + cw, -doorHalfW - cw, false], [-doorHalfW, doorHalfW, true], [doorHalfW + cw, W / 2 - cw, false]]) {
+      const len = Math.abs(x2 - x1), mx = (x1 + x2) / 2;
+      addUVBox(len, 0.16, 0.12, mx, 0.08, fz, UV_FRAMES);
+      addUVBox(len, 0.13, 0.12, mx, H - 0.065, fz, UV_FRAMES);
+      addUVBox(len, 0.10, 0.11, mx, 2.68, fz, UV_FRAMES);
+      const g = new THREE.Mesh(new THREE.BoxGeometry(len - 0.06, H - 0.26, 0.02), glassMat);
+      g.position.set(mx, H / 2, fz);
+      store.add(g);
       if (isDoor) {
         for (const off of [-0.82, 0, 0.82]) {
-          addBox(0.08, 2.68, 0.13, mx + off, 1.34, fz, matFrame);
+          addUVBox(0.08, 2.68, 0.13, mx + off, 1.34, fz, UV_FRAMES);
         }
       } else {
-        addBox(len - 0.08, 0.22, 0.03, mx, 1.25, fz + 0.01, matDecal);
+        addUVBox(len - 0.08, 0.22, 0.03, mx, 1.25, fz + 0.01, UV_GLASS_DECAL);
       }
     }
-    addFrontBay(-W / 2 + colW, -doorHalfW - colW);
-    addFrontBay(-doorHalfW, doorHalfW, true);
-    addFrontBay(doorHalfW + colW, W / 2 - colW);
 
-    // Left Side Window Bays
+    // Left Side Mullions, Frosted Decals & Glass
     const lx = -W / 2 + 0.22;
-    function addSideBay(z1, z2) {
-      const len = Math.abs(z2 - z1);
-      const mz = (z1 + z2) / 2;
-      addBox(0.12, 0.16, len, lx, 0.08, mz, matFrame);
-      addBox(0.12, 0.13, len, lx, H - 0.065, mz, matFrame);
-      addBox(0.11, 0.10, len, lx, 2.68, mz, matFrame);
-      addBox(0.02, H - 0.26, len - 0.06, lx, H / 2, mz, matGlass);
-      addBox(0.03, 0.22, len - 0.08, lx - 0.01, 1.25, mz, matDecal);
-    }
-    addSideBay(0.22, D / 2 - colW);
-    addSideBay(-D / 2 + colW, -0.22);
-
-    // ==========================================
-    // 4. SLEEK STEPPED ROOF & SYMMETRICAL SIGN FASCIA
-    // ==========================================
-    const yf = H + 0.22;
-    const overhang = 0.45;
-    const fw = W + overhang * 2;
-    const fd = D + overhang * 2;
-
-    addBox(fw, HF, fd, 0, yf + HF / 2, 0, matFascia);
-    addBox(fw + 0.28, 0.14, fd + 0.28, 0, yf + HF + 0.07, 0, matFrame);
-    addBox(fw - 0.15, 0.30, fd - 0.15, 0, yf + HF + 0.29, 0, matCornice);
-    addBox(fw + 0.12, 0.12, fd + 0.12, 0, yf + HF + 0.50, 0, matFrame);
-
-    // Crisp Soffit Tube Fixtures Mounted Under Canopy Overhang
-    for (const sx of [-4.2, 0, 4.2]) {
-      addBox(3.2, 0.06, 0.16, sx, yf - 0.02, D / 2 + 0.22, matTubeBulb);
-    }
-    for (const sz of [-2.4, 2.4]) {
-      addBox(0.16, 0.06, 3.2, -W / 2 - 0.22, yf - 0.02, sz, matTubeBulb);
+    for (const [z1, z2] of [[0.22, D / 2 - cw], [-D / 2 + cw, -0.22]]) {
+      const len = Math.abs(z2 - z1), mz = (z1 + z2) / 2;
+      addUVBox(0.12, 0.16, len, lx, 0.08, mz, UV_FRAMES);
+      addUVBox(0.12, 0.13, len, lx, H - 0.065, mz, UV_FRAMES);
+      addUVBox(0.11, 0.10, len, lx, 2.68, mz, UV_FRAMES);
+      const g = new THREE.Mesh(new THREE.BoxGeometry(0.02, H - 0.26, len - 0.06), glassMat);
+      g.position.set(lx, H / 2, mz);
+      store.add(g);
+      addUVBox(0.03, 0.22, len - 0.08, lx - 0.01, 1.25, mz, UV_GLASS_DECAL);
     }
 
-    // Symmetrical Neon Stripes & Centered Sign
+    // Canopy Fascia & Sleek Stepped Cornice Roof
+    const yf = H + 0.22, fw = W + 0.90, fd = D + 0.90;
+    addUVBox(fw, HF, fd, 0, yf + HF / 2, 0, UV_FRAMES);
+    addUVBox(fw + 0.28, 0.14, fd + 0.28, 0, yf + HF + 0.07, 0, UV_FRAMES);
+    addUVBox(fw - 0.15, 0.30, fd - 0.15, 0, yf + HF + 0.29, 0, UV_STEP_BASE);
+    addUVBox(fw + 0.12, 0.12, fd + 0.12, 0, yf + HF + 0.50, 0, UV_FRAMES);
+
+    // Symmetrical Sign Panel & Neon Wings
     const signW = 5.40;
     const wingW = (fw - signW - 0.36) / 2;
-    const leftWingCenterX  = -signW / 2 - 0.12 - wingW / 2;
-    const rightWingCenterX =  signW / 2 + 0.12 + wingW / 2;
+    addUVBox(signW, HF - 0.16, 0.06, 0, yf + HF / 2, fd / 2 + 0.015, UV_SIGN_BOARD);
 
-    const stripeMatList = [
-      [matOrange, yf + HF - 0.30],
-      [matGreen,  yf + HF - 0.72],
-      [matRed,    yf + HF - 1.14],
-    ];
-    for (const [sMat, sy] of stripeMatList) {
-      addBox(0.06, 0.25, fd - 0.24, -fw / 2 - 0.01, sy, 0, sMat);
-      addBox(wingW, 0.25, 0.06, leftWingCenterX,  sy, fd / 2 + 0.01, sMat);
-      addBox(wingW, 0.25, 0.06, rightWingCenterX, sy, fd / 2 + 0.01, sMat);
+    for (const sy of [yf + HF - 0.30, yf + HF - 0.72, yf + HF - 1.14]) {
+      addUVBox(0.06, 0.25, fd - 0.24, -fw / 2 - 0.01, sy, 0, UV_NEON_STRIP);
+      addUVBox(wingW, 0.25, 0.06, -signW / 2 - 0.12 - wingW / 2, sy, fd / 2 + 0.01, UV_NEON_STRIP);
+      addUVBox(wingW, 0.25, 0.06,  signW / 2 + 0.12 + wingW / 2, sy, fd / 2 + 0.01, UV_NEON_STRIP);
     }
 
-    // Dark Inked Frame Dividers
-    addBox(0.14, HF - 0.08, 0.14, -fw / 2, yf + HF / 2,  fd / 2, matFrame);
-    addBox(0.14, HF - 0.08, 0.14,  fw / 2, yf + HF / 2,  fd / 2, matFrame);
-    addBox(0.12, HF - 0.10, 0.08, -signW / 2 - 0.06, yf + HF / 2, fd / 2 + 0.01, matFrame);
-    addBox(0.12, HF - 0.10, 0.08,  signW / 2 + 0.06, yf + HF / 2, fd / 2 + 0.01, matFrame);
-
-    // Centered "Flash N Dash" Sign Panel
-    addBox(signW, HF - 0.16, 0.05, 0, yf + HF / 2, fd / 2 + 0.015, matSignBoard);
+    // Ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(80, 80),
+      new THREE.MeshBasicMaterial({ color: 0x11162b })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
 
     window.addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
-      composer.setSize(innerWidth, innerHeight);
     });
 
     renderer.setAnimationLoop(() => {
       controls.update();
-      composer.render();
+      renderer.render(scene, camera);
     });
   </script>
 </body>
